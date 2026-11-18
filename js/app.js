@@ -213,9 +213,7 @@ function viewCheckout() {
       <dl class="review-grid mt-5"><div><dt>CPF do solicitante</dt><dd>${esc(d.cpf)}</dd></div><div><dt>CNPJ a declarar</dt><dd>${esc(d.cnpj)}</dd></div></dl>
       <div class="price-row"><span>Valor total<br><small class="text-muted">Pagamento único</small></span><strong>${brl(SERVICE_PRICE_CENTS)}</strong></div>
       <h3>Escolha a forma de pagamento</h3>
-      <label class="payment-method"><input type="radio" name="payment" checked>${icon("qr-code", 24)}<span><strong>PIX</strong><small>Transferência imediata via PIX</small></span></label>
-      <label class="payment-method unavailable"><input type="radio" name="payment" disabled>${icon("credit-card", 24)}<span>Cartão de crédito<small>Parcelado em até 3x</small></span><span class="soon">EM BREVE</span></label>
-      <div class="notice">${icon("info", 17)}<span>O pagamento é feito por PIX. O QR Code será gerado na próxima etapa e vale por 15 minutos.</span></div></div>
+      <label class="payment-method"><input type="radio" name="payment" checked>${icon("qr-code", 24)}<span><strong>PIX</strong><small>Transferência imediata via PIX</small></span></label></div>
     <div class="form-actions"><a class="btn btn-outline btn-flow" href="#/revisao">${icon("arrow-left")} Voltar</a>
       <a class="btn btn-primary btn-flow" href="#/pagamento">Gerar PIX ${icon("arrow-right")}</a></div></div>`);
 }
@@ -286,7 +284,7 @@ function paintPayment() {
   const back = `<a class="btn btn-link" href="#/checkout">${icon("arrow-left")} Voltar ao resumo</a>`;
   if (!o || o.status === "new" || (!o.pix && o.status !== "expired")) {
     box.innerHTML = `${icon("qr-code", 44)}<h2>Pagar com PIX</h2>
-      <p>Valor: <strong>${brl(SERVICE_PRICE_CENTS)}</strong><br>O QR Code vale por 15 minutos.</p>
+      <p>Valor: <strong>${brl(SERVICE_PRICE_CENTS)}</strong></p>
       <button class="btn btn-primary btn-flow" id="gen" ${o && o.busy ? "disabled" : ""}>${o && o.busy ? icon("loader", 16, "spin") + " Gerando…" : "Gerar QR Code PIX"}</button>
       ${err}<p class="field-helper mt-5">Nenhuma cobrança é criada antes de você clicar no botão.</p>${back}`;
     const g = document.getElementById("gen"); if (g) g.onclick = generatePix;
@@ -317,6 +315,10 @@ function paintPayment() {
 
 function viewPayment() {
   if (!isValid()) return shell(3, emptyDraft());
+  // Gera PIX automaticamente ao chegar nessa página
+  if (!state.order || state.order.status === "new") {
+    generatePix();
+  }
   return shell(3, `<section class="form-panel empty-state" id="pay-panel"></section>`);
 }
 
