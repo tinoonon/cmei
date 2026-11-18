@@ -1,5 +1,5 @@
 /* Regras de negócio: preço, máscaras e validação (porte do src/lib/mei.ts) */
-const SERVICE_PRICE_CENTS = 100;
+const SERVICE_PRICE_CENTS = 7990;
 const UFS = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 const digits = (v) => String(v).replace(/\D/g, "");
 
