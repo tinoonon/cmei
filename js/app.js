@@ -1,6 +1,6 @@
 /* App MEI Digital: roteamento por hash + telas. O rascunho fica só em memória (não persiste dados pessoais). */
-const state = { data: EMPTY_DECLARATION(), touched: {}, cepStatus: "", cepBusy: false,
-  order: null /* { id, pix, status, busy, error } */ };
+const EMPTY_DECLARATION = () => ({ name: "", cpf: "", birth: "", sex: "", email: "", phone: "", mobile: "", cnpj: "", cep: "", street: "", number: "", complement: "", neighborhood: "", city: "", state: "", marketing: false, terms: false });
+const state = { data: EMPTY_DECLARATION(), touched: {}, cepStatus: "", cepBusy: false, order: null };
 let payTimer = null;
 let cepController = null;
 
@@ -46,7 +46,7 @@ function shell(step, content) {
   }).join("");
   return `
   <header class="site-header"><div class="header-inner">
-    <a href="#/" class="brand"><img src="imagemlogo.png" alt="DeclareMei" class="brand-logo">
+    <a href="#/" class="brand"><img src="https://i.ibb.co/CsYPdqkf/imagemsite.png" alt="DeclareMei" class="brand-logo">
       <span>Declare<span class="text-primary">Mei</span><small>Seu negócio em dia.</small></span></a>
     <div class="header-actions">
       <span class="secure-header">${icon("shield-check", 15)} Ambiente seguro</span>
@@ -119,7 +119,11 @@ function viewIndex() {
     </div>
     <div class="form-actions"><span>${icon("lock", 13)} Informações protegidas</span>
       <button class="btn btn-primary btn-flow" type="submit" id="submit">Próximo ${icon("arrow-right")}</button></div>
-  </form>`);
+  </form>
+  <div class="form-panel" style="margin-top: 24px; padding: 20px; text-align: center;">
+    <p style="margin-bottom: 12px; color: var(--muted-foreground);">Deseja cancelar seu MEI?</p>
+    <a href="#/cancelamento" class="btn btn-outline btn-flow">Acessar cancelamento ${icon("arrow-right")}</a>
+  </div>`);
 }
 
 /* Atualiza erros/estado dos botões sem recriar o formulário (preserva foco do teclado) */
@@ -239,8 +243,9 @@ async function generatePix() {
   if (o.busy) return;
   o.busy = true; o.error = ""; paintPayment();
   try {
-    // Mesmo orderId = mesma cobrança (idempotência), então reenviar nunca cobra duas vezes.
-    const pix = await api("/api/pix/create", { method: "POST", body: JSON.stringify({ orderId: o.id, declaration: state.data }) });
+    const isCancel = location.hash.startsWith("#/cancelamento");
+    const endpoint = isCancel ? "/api/pix/cancel" : "/api/pix/create";
+    const pix = await api(endpoint, { method: "POST", body: JSON.stringify({ orderId: o.id, declaration: state.data }) });
     o.pix = pix; o.status = pix.status || "pending";
     startPolling();
   } catch (e) { o.error = e.message; }
@@ -249,8 +254,10 @@ async function generatePix() {
 
 /* Avisa a equipe no Discord (via servidor). Tenta algumas vezes; o cliente já pagou, então nunca bloqueia a confirmação. */
 async function notifyTeam(o) {
+  const isCancel = location.hash.startsWith("#/cancelamento");
+  const endpoint = isCancel ? "/api/pix/notify-cancel" : "/api/pix/notify";
   for (let i = 0; i < 3; i++) {
-    try { await api("/api/pix/notify", { method: "POST", body: JSON.stringify({ orderId: o.id, declaration: state.data }) }); return; }
+    try { await api(endpoint, { method: "POST", body: JSON.stringify({ orderId: o.id, declaration: state.data }) }); return; }
     catch { await new Promise((r) => setTimeout(r, 1000 * 2 ** i)); }
   }
 }
@@ -265,12 +272,16 @@ function startPolling() {
     const el = document.getElementById("countdown");
     if (el) el.textContent = `${String(Math.floor(left / 60)).padStart(2, "0")}:${String(left % 60).padStart(2, "0")}`;
     if (left === 0) { o.status = "expired"; clearInterval(payTimer); return paintPayment(); }
-    if (++tick % 4) return; // consulta o status a cada ~4s
+    if (++tick % 4) return;
     try {
       const s = await api(`/api/pix/status?orderId=${o.id}`);
       if (s.status !== "pending" && state.order === o) {
         o.status = s.status; clearInterval(payTimer);
-        if (s.status === "paid") { await notifyTeam(o); location.hash = "#/confirmacao"; } else paintPayment();
+        if (s.status === "paid") { 
+          await notifyTeam(o); 
+          const isCancel = location.hash.startsWith("#/cancelamento");
+          location.hash = isCancel ? "#/cancelamento/confirmacao" : "#/confirmacao";
+        } else paintPayment();
       }
     } catch { /* falha de rede momentânea: tenta de novo no próximo ciclo */ }
   }, 1000);
@@ -332,6 +343,151 @@ function viewConfirmation() {
     <a class="btn btn-primary btn-flow" href="#/">Voltar para o início</a></section>`);
 }
 
+/* ---------- Fluxo de Cancelamento de MEI ---------- */
+const STEPS_CANCEL = [["Seus dados", "user"], ["Revisão", "clipboard-check"], ["Pagamento", "qr-code"]];
+const INTRO_CANCEL = ["Preencha seus dados para continuar com o cancelamento.", "Confira suas informações antes de continuar.", "Você está a um passo de concluir sua solicitação de cancelamento."];
+const CAPTION_CANCEL = ["Vamos começar", "Quase lá", "Última etapa"];
+
+function shellCancel(step, content) {
+  const stepper = STEPS_CANCEL.map(([label, ic], i) => {
+    const cls = step === i + 1 ? "current" : step > i + 1 ? "complete" : "";
+    return `<div class="step ${cls}" ${step === i + 1 ? 'aria-current="step"' : ""}>
+      <span class="step-circle">${step > i + 1 ? icon("check", 17) : icon(ic, 17)}</span><span>${label}</span>${i < 2 ? '<span class="step-line"></span>' : ""}</div>`;
+  }).join("");
+  return `
+  <header class="site-header"><div class="header-inner">
+    <a href="#/" class="brand"><img src="https://i.ibb.co/CsYPdqkf/imagemsite.png" alt="DeclareMei" class="brand-logo">
+      <span>Declare<span class="text-primary">Mei</span><small>Seu negócio em dia.</small></span></a>
+    <div class="header-actions">
+      <span class="secure-header">${icon("shield-check", 15)} Ambiente seguro</span>
+      <button type="button" class="btn btn-ghost" data-modal="support">${icon("headphones")} Precisa de ajuda?</button>
+    </div></div></header>
+  <main class="flow-main">
+    <div class="page-intro"><span class="year-label"><span></span> CANCELAMENTO DE MEI</span>
+      <h1>Cancele seu MEI</h1><p>${INTRO_CANCEL[step - 1]}</p></div>
+    <nav class="stepper" aria-label="Progresso do cancelamento">${stepper}</nav>
+    <div class="step-caption"><span>Etapa ${step} de 3</span><span>${CAPTION_CANCEL[step - 1]}</span></div>
+    ${content}
+    <div class="trust-footer">${icon("lock", 14)}<span>Seus dados merecem cuidado e privacidade.</span></div>
+    <p class="independent-note">Serviço privado de assessoria, sem vínculo com o Governo Federal.<br>O cancelamento também pode ser feito gratuitamente no portal oficial.</p>
+  </main>
+  <footer class="site-footer"><span>© 2026 MEI Digital</span><span>Feito para quem empreende.</span><span>${icon("shield-check", 14)} Privacidade em primeiro lugar</span></footer>`;
+}
+
+const dataCancelamento = () => ({ name: "", cpf: "", birth: "", sex: "", email: "", phone: "", mobile: "", cnpj: "", cep: "", street: "", number: "", complement: "", neighborhood: "", city: "", state: "", marketing: false, terms: false });
+
+function viewIndexCancel() {
+  const cepOk = digits(state.data.cep).length === 8;
+  const addr = { disabled: !cepOk };
+  const opts = (list, sel) => list.map((s) => `<option ${s === sel ? "selected" : ""}>${s}</option>`).join("");
+  return shellCancel(1, `<form class="form-panel" id="form-cancel" novalidate>
+    <div class="panel-heading"><span class="heading-icon">${icon("user", 20)}</span><div><h2>Dados para cancelamento</h2><p>Campos com <span class="required">*</span> são obrigatórios.</p></div></div>
+    <div class="form-body">
+      <section class="form-section"><h3 class="section-title">${icon("user")} Dados pessoais</h3><div class="form-grid">
+        ${formField("name", "Nome completo", "Ex: Maria da Silva", { full: true })}
+        ${formField("cpf", "CPF", "000.000.000-00", { pattern: "###.###.###-##" })}
+        ${formField("birth", "Data de nascimento", "", { type: "date" })}
+        <div class="field"><label for="sex">Sexo<span class="required">*</span></label>
+          <select id="sex"><option value="" disabled ${state.data.sex ? "" : "selected"}>Selecione uma opção</option>${opts(["Masculino","Feminino","Outro"], state.data.sex)}</select>
+          <p class="field-error" id="sex-error" hidden></p></div>
+        ${formField("email", "E-mail", "seu@email.com", { type: "email" })}
+        ${formField("phone", "Telefone", "(00) 0000-0000", { pattern: "(##) ####-####" })}
+        ${formField("mobile", "Celular", "(00) 00000-0000", { pattern: "(##) #####-####" })}
+      </div></section>
+      <section class="form-section"><h3 class="section-title">${icon("building")} Dados do MEI</h3>
+        <div class="form-grid">${formField("cnpj", "CNPJ a ser cancelado", "00.000.000/0000-00", { pattern: "##.###.###/####-##", full: true })}</div>
+        <button class="btn btn-link cnpj-help" type="button" data-modal="cnpj">${icon("info", 12)} Não sei o número do meu CNPJ</button></section>
+      <section class="form-section"><h3 class="section-title">${icon("map-pin")} Endereço residencial</h3><div class="form-grid">
+        ${formField("cep", "CEP", "00000-000", { pattern: "#####-###" })}
+        <div class="field-helper self-center" id="cep-status" aria-live="polite"></div>
+        ${formField("street", "Endereço", "Rua, avenida…", { full: true, ...addr })}
+        ${formField("number", "Número", "Ex: 123", addr)}
+        ${formField("complement", "Complemento", "Apto, bloco (opcional)", addr)}
+        ${formField("neighborhood", "Bairro", "Seu bairro", { full: true, ...addr })}
+        ${formField("city", "Cidade", "Sua cidade", addr)}
+        <div class="field"><label for="state">Estado<span class="required">*</span></label>
+          <select id="state" ${cepOk ? "" : "disabled"}><option value="">Selecione o estado</option>${opts(UFS, state.data.state)}</select>
+          <p class="field-error" id="state-error" hidden></p></div>
+      </div></section>
+      <div class="consent">
+        <label class="check-row"><input type="checkbox" id="marketing" ${state.data.marketing ? "checked" : ""}><span>Desejo receber notícias e campanhas da MEI Digital.</span></label>
+        <div class="check-row"><input id="terms" type="checkbox" ${state.data.terms ? "checked" : ""}>
+          <label for="terms">Li e aceito os <button type="button" class="btn btn-link inline-link" data-modal="terms">Termos de Uso</button> e a <button type="button" class="btn btn-link inline-link" data-modal="privacy">Política de Privacidade</button> deste site.<span class="required">*</span></label></div>
+      </div>
+    </div>
+    <div class="form-actions"><span>${icon("lock", 13)} Informações protegidas</span>
+      <button class="btn btn-primary btn-flow" type="submit" id="submit-cancel">Próximo ${icon("arrow-right")}</button></div>
+  </form>`);
+}
+
+function bindFormCancel() {
+  const form = document.getElementById("form-cancel");
+  refreshForm();
+  form.addEventListener("input", (e) => {
+    const el = e.target; const key = el.id || el.name;
+    if (!(key in state.data)) return;
+    if (el.type === "checkbox") state.data[key] = el.checked;
+    else {
+      const pattern = el.dataset.mask;
+      state.data[key] = pattern ? mask(el.value, pattern) : el.value;
+      if (pattern && el.value !== state.data[key]) el.value = state.data[key];
+    }
+    if (state.order && state.order.status !== "paid") state.order = null;
+    if (key === "cep") lookupCep();
+    refreshForm();
+  });
+  form.addEventListener("change", (e) => { if (e.target.tagName === "SELECT") { state.data[e.target.id] = e.target.value; refreshForm(); } });
+  form.addEventListener("focusout", (e) => { const key = e.target.id; if (key in state.data) { state.touched[key] = true; refreshForm(); } });
+  form.addEventListener("submit", (e) => { e.preventDefault(); if (isValid()) location.hash = "#/cancelamento/revisao"; });
+}
+
+function viewReviewCancel() {
+  if (!isValid()) return shellCancel(2, emptyDraft());
+  const d = state.data;
+  const sections = [
+    ["Dados pessoais", [["Nome completo", d.name], ["CPF", d.cpf], ["Data de nascimento", d.birth.split("-").reverse().join("/")], ["Sexo", d.sex], ["E-mail", d.email], ["Telefone", d.phone], ["Celular", d.mobile]]],
+    ["Dados do MEI", [["CNPJ a cancelar", d.cnpj]]],
+    ["Endereço residencial", [["Endereço", `${d.street}, ${d.number}${d.complement ? `, ${d.complement}` : ""}`], ["Bairro", d.neighborhood], ["Cidade / Estado", `${d.city} / ${d.state}`], ["CEP", d.cep]]],
+    ["Consentimento", [["Notícias e campanhas", d.marketing ? "Sim, desejo receber" : "Não desejo receber"], ["Termos e privacidade", "Aceitos"]]],
+  ].map(([title, items]) => `<section class="review-section"><div class="review-heading"><h3>${title}</h3>
+      <a class="btn btn-link btn-sm" href="#/cancelamento">${icon("pencil")} Editar</a></div>
+      <dl class="review-grid">${items.map(([l, v]) => `<div><dt>${l}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl></section>`).join("");
+  return shellCancel(2, `<div class="form-panel"><div class="panel-heading"><span class="heading-icon">${icon("clipboard-check", 20)}</span><div><h2>Revise seus dados</h2><p>Certifique-se de que tudo está correto.</p></div></div>
+    ${sections}
+    <div class="form-actions"><a class="btn btn-outline btn-flow" href="#/cancelamento">${icon("arrow-left")} Voltar</a>
+      <a class="btn btn-primary btn-flow" href="#/cancelamento/checkout">Prosseguir para pagamento ${icon("arrow-right")}</a></div></div>`);
+}
+
+function viewCheckoutCancel() {
+  if (!isValid()) return shellCancel(3, emptyDraft());
+  const d = state.data;
+  return shellCancel(3, `<div class="form-panel"><div class="panel-heading"><span class="heading-icon">${icon("clipboard-check", 20)}</span><div><h2>Resumo do pedido</h2><p>Cancelamento de MEI</p></div></div>
+    <div class="order-body"><h3>Assessoria para cancelamento de MEI</h3>
+      <p>Preparação, revisão e protocolamento do cancelamento pela equipe responsável. Serviço privado, não se trata de uma taxa do governo.</p>
+      <dl class="review-grid mt-5"><div><dt>CPF do solicitante</dt><dd>${esc(d.cpf)}</dd></div><div><dt>CNPJ a cancelar</dt><dd>${esc(d.cnpj)}</dd></div></dl>
+      <div class="price-row"><span>Valor total<br><small class="text-muted">Pagamento único</small></span><strong>${brl(SERVICE_PRICE_CENTS)}</strong></div></div>
+    <div class="form-actions"><a class="btn btn-outline btn-flow" href="#/cancelamento/revisao">${icon("arrow-left")} Voltar</a>
+      <a class="btn btn-primary btn-flow" href="#/cancelamento/pagamento">Gerar PIX ${icon("arrow-right")}</a></div></div>`);
+}
+
+function viewPaymentCancel() {
+  if (!isValid()) return shellCancel(3, emptyDraft());
+  if (!state.order || state.order.status === "new") {
+    generatePix();
+  }
+  return shellCancel(3, `<section class="form-panel empty-state" id="pay-panel"></section>`);
+}
+
+function viewConfirmationCancel() {
+  const paid = state.order && state.order.status === "paid";
+  if (paid) return shellCancel(3, `<section class="form-panel empty-state">${icon("check", 44, "ok")}
+    <h2>Pagamento confirmado</h2><p>Recebemos o seu pagamento. Sua solicitação de cancelamento entrou na fila da equipe responsável.<br>Pagamento não significa cancelamento protocolado: você será avisado quando ele for concluído.</p>
+    <a class="btn btn-primary btn-flow" href="#/">Voltar para o início</a></section>`);
+  return shellCancel(3, `<section class="form-panel empty-state">${icon("clock", 44)}
+    <h2>Nenhum pagamento confirmado</h2><p>A confirmação aparece somente após a verificação do pagamento. Nenhum cancelamento foi registrado ou protocolado.</p>
+    <a class="btn btn-primary btn-flow" href="#/">Voltar para o início</a></section>`);
+}
+
 /* ---------- Roteador ---------- */
 const ROUTES = {
   "/": [viewIndex, "Declare seu MEI agora", bindForm],
@@ -339,13 +495,26 @@ const ROUTES = {
   "/checkout": [viewCheckout, "Checkout PIX"],
   "/pagamento": [viewPayment, "Pagamento PIX", () => { paintPayment(); if (state.order && state.order.status === "pending") startPolling(); }],
   "/confirmacao": [viewConfirmation, "Status da solicitação"],
+  "/cancelamento": [viewIndexCancel, "Cancele seu MEI", bindFormCancel],
+  "/cancelamento/revisao": [viewReviewCancel, "Revise seus dados - Cancelamento"],
+  "/cancelamento/checkout": [viewCheckoutCancel, "Checkout PIX - Cancelamento"],
+  "/cancelamento/pagamento": [viewPaymentCancel, "Pagamento PIX - Cancelamento", () => { paintPayment(); if (state.order && state.order.status === "pending") startPolling(); }],
+  "/cancelamento/confirmacao": [viewConfirmationCancel, "Status do cancelamento"],
 };
 function render() {
   clearInterval(payTimer);
   const path = location.hash.replace(/^#/, "") || "/";
   const [view, title, after] = ROUTES[path] || ROUTES["/"];
+  
+  // Redireciona para confirmação após pagamento
+  if ((path === "/pagamento" || path === "/cancelamento/pagamento") && state.order && state.order.status === "paid") {
+    const confirmPath = path === "/cancelamento/pagamento" ? "#/cancelamento/confirmacao" : "#/confirmacao";
+    location.hash = confirmPath;
+    return;
+  }
+  
   $app.innerHTML = view();
-  document.title = `${title} | MEI Digital`;
+  document.title = `${title} | DeclareMei`;
   if (after) after();
   window.scrollTo(0, 0);
 }
