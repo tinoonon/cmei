@@ -46,7 +46,7 @@ function shell(step, content) {
   }).join("");
   return `
   <header class="site-header"><div class="header-inner">
-    <a href="#/" class="brand"><img src="https://cdn.discordapp.com/attachments/1567379229388185620/1572441924638351520/images-removebg-preview.png?ex=6afe6229&is=6afd10a9&hm=4a531396337b577f2c377d422c0b5034c70b14ab5a63af7bbfe3bec469c9a4af" alt="RegularizeMei" class="brand-logo">
+    <a href="#/" class="brand"><img src="imagemlogo.png" alt="DeclareMei" class="brand-logo">
       <span>Declare<span class="text-primary">Mei</span><small>Seu negócio em dia.</small></span></a>
     <div class="header-actions">
       <span class="secure-header">${icon("shield-check", 15)} Ambiente seguro</span>
