@@ -68,6 +68,41 @@ const emptyDraft = () => `<div class="form-panel empty-state">${icon("clipboard-
   <h2>Vamos começar pelos seus dados</h2><p>Preencha o formulário para revisar sua solicitação.</p>
   <a class="btn btn-primary" href="#/">Preencher meus dados ${icon("arrow-right")}</a></div>`;
 
+/* ---------- Página de início - escolha entre declarar ou cancelar ---------- */
+function viewHome() {
+  return `
+  <header class="site-header"><div class="header-inner">
+    <a href="#/" class="brand"><img src="https://i.ibb.co/CsYPdqkf/imagemsite.png" alt="DeclareMei" class="brand-logo">
+      <span>Declare<span class="text-primary">Mei</span><small>Seu negócio em dia.</small></span></a>
+    <div class="header-actions">
+      <span class="secure-header">${icon("shield-check", 15)} Ambiente seguro</span>
+      <button type="button" class="btn btn-ghost" data-modal="support">${icon("headphones")} Precisa de ajuda?</button>
+    </div></div></header>
+  <main class="flow-main">
+    <div class="page-intro"><span class="year-label"><span></span> SERVIÇO COMPLETO</span>
+      <h1>Como podemos ajudar?</h1><p>Escolha a opção que melhor se encaixa com sua necessidade.</p></div>
+    <div class="form-panel" style="padding: 40px;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 30px;">
+        <div style="padding: 24px; border: 1px solid var(--border); border-radius: 8px; text-align: center;">
+          <div style="font-size: 44px; margin-bottom: 16px;">${icon("file-check", 44)}</div>
+          <h3 style="font-size: 20px; font-weight: 700; margin-bottom: 12px;">Declaração Anual</h3>
+          <p style="color: var(--muted-foreground); margin-bottom: 20px; font-size: 14px;">Realize sua declaração anual de MEI com segurança e facilidade.</p>
+          <a href="#/declaracao" class="btn btn-primary btn-flow">Começar declaração ${icon("arrow-right")}</a>
+        </div>
+        <div style="padding: 24px; border: 1px solid var(--border); border-radius: 8px; text-align: center;">
+          <div style="font-size: 44px; margin-bottom: 16px;">${icon("x", 44)}</div>
+          <h3 style="font-size: 20px; font-weight: 700; margin-bottom: 12px;">Cancelamento de MEI</h3>
+          <p style="color: var(--muted-foreground); margin-bottom: 20px; font-size: 14px;">Cancele seu MEI de forma segura e com assessoria profissional.</p>
+          <a href="#/cancelamento" class="btn btn-outline btn-flow">Começar cancelamento ${icon("arrow-right")}</a>
+        </div>
+      </div>
+    </div>
+    <div class="trust-footer">${icon("lock", 14)}<span>Seus dados merecem cuidado e privacidade.</span></div>
+    <p class="independent-note">Serviço privado de assessoria, sem vínculo com o Governo Federal.<br>Os serviços também podem ser feitos gratuitamente nos portais oficiais.</p>
+  </main>
+  <footer class="site-footer"><span>© 2026 MEI Digital</span><span>Feito para quem empreende.</span><span>${icon("shield-check", 14)} Privacidade em primeiro lugar</span></footer>`;
+}
+
 /* ---------- Telas ---------- */
 function formField(key, label, placeholder, { pattern, full = false, type = "text", disabled = false } = {}) {
   return `<div class="field ${full ? "full" : ""}">
@@ -119,11 +154,7 @@ function viewIndex() {
     </div>
     <div class="form-actions"><span>${icon("lock", 13)} Informações protegidas</span>
       <button class="btn btn-primary btn-flow" type="submit" id="submit">Próximo ${icon("arrow-right")}</button></div>
-  </form>
-  <div class="form-panel" style="margin-top: 24px; padding: 20px; text-align: center;">
-    <p style="margin-bottom: 12px; color: var(--muted-foreground);">Deseja cancelar seu MEI?</p>
-    <a href="#/cancelamento" class="btn btn-outline btn-flow">Acessar cancelamento ${icon("arrow-right")}</a>
-  </div>`);
+  </form>`);
 }
 
 /* Atualiza erros/estado dos botões sem recriar o formulário (preserva foco do teclado) */
@@ -204,7 +235,7 @@ function viewReview() {
       <dl class="review-grid">${items.map(([l, v]) => `<div><dt>${l}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl></section>`).join("");
   return shell(2, `<div class="form-panel"><div class="panel-heading"><span class="heading-icon">${icon("clipboard-check", 20)}</span><div><h2>Revise seus dados</h2><p>Certifique-se de que tudo está correto.</p></div></div>
     ${sections}
-    <div class="form-actions"><a class="btn btn-outline btn-flow" href="#/">${icon("arrow-left")} Voltar</a>
+    <div class="form-actions"><a class="btn btn-outline btn-flow" href="#/declaracao">${icon("arrow-left")} Voltar</a>
       <a class="btn btn-primary btn-flow" href="#/checkout">Prosseguir para pagamento ${icon("arrow-right")}</a></div></div>`);
 }
 
@@ -490,7 +521,8 @@ function viewConfirmationCancel() {
 
 /* ---------- Roteador ---------- */
 const ROUTES = {
-  "/": [viewIndex, "Declare seu MEI agora", bindForm],
+  "/": [viewHome, "DeclareMei - Escolha uma opção"],
+  "/declaracao": [viewIndex, "Declare seu MEI agora", bindForm],
   "/revisao": [viewReview, "Revise seus dados"],
   "/checkout": [viewCheckout, "Checkout PIX"],
   "/pagamento": [viewPayment, "Pagamento PIX", () => { paintPayment(); if (state.order && state.order.status === "pending") startPolling(); }],
