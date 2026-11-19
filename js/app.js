@@ -1,11 +1,12 @@
 /* App MEI Digital: roteamento por hash + telas. O rascunho fica só em memória (não persiste dados pessoais). */
-const EMPTY_DECLARATION = () => ({ name: "", cpf: "", birth: "", sex: "", email: "", phone: "", mobile: "", cnpj: "", cep: "", street: "", number: "", complement: "", neighborhood: "", city: "", state: "", marketing: false, terms: false });
+/* EMPTY_DECLARATION vem de js/mei.js (não redeclarar aqui: causa SyntaxError e tela branca) */
 const state = { data: EMPTY_DECLARATION(), touched: {}, cepStatus: "", cepBusy: false, order: null };
 let payTimer = null;
 let cepController = null;
 
 const $app = document.getElementById("app");
 const $dialog = document.getElementById("dialog");
+const isCancelRoute = () => location.hash.startsWith("#/cancelamento");
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 const isValid = () => Object.keys(validate(state.data)).length === 0;
 const brl = (cents) => (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -46,7 +47,7 @@ function shell(step, content) {
   }).join("");
   return `
   <header class="site-header"><div class="header-inner">
-    <a href="#/" class="brand"><img src="https://i.ibb.co/CsYPdqkf/imagemsite.png" alt="DeclareMei" class="brand-logo">
+    <a href="#/" class="brand"><img src="https://i.ibb.co/CsYPdqkf/imagemsite.png" alt="DeclareMei" class="brand-logo" onerror="this.onerror=null;this.src='imagemsite.png'">
       <span>Declare<span class="text-primary">Mei</span><small>Seu negócio em dia.</small></span></a>
     <div class="header-actions">
       <span class="secure-header">${icon("shield-check", 15)} Ambiente seguro</span>
@@ -64,15 +65,15 @@ function shell(step, content) {
   <footer class="site-footer"><span>© 2026 MEI Digital</span><span>Feito para quem empreende.</span><span>${icon("shield-check", 14)} Privacidade em primeiro lugar</span></footer>`;
 }
 
-const emptyDraft = () => `<div class="form-panel empty-state">${icon("clipboard-check", 38)}
+const emptyDraft = (href = "#/declaracao") => `<div class="form-panel empty-state">${icon("clipboard-check", 38)}
   <h2>Vamos começar pelos seus dados</h2><p>Preencha o formulário para revisar sua solicitação.</p>
-  <a class="btn btn-primary" href="#/">Preencher meus dados ${icon("arrow-right")}</a></div>`;
+  <a class="btn btn-primary" href="${href}">Preencher meus dados ${icon("arrow-right")}</a></div>`;
 
 /* ---------- Página de início - escolha entre declarar ou cancelar ---------- */
 function viewHome() {
   return `
   <header class="site-header"><div class="header-inner">
-    <a href="#/" class="brand"><img src="https://i.ibb.co/CsYPdqkf/imagemsite.png" alt="DeclareMei" class="brand-logo">
+    <a href="#/" class="brand"><img src="https://i.ibb.co/CsYPdqkf/imagemsite.png" alt="DeclareMei" class="brand-logo" onerror="this.onerror=null;this.src='imagemsite.png'">
       <span>Declare<span class="text-primary">Mei</span><small>Seu negócio em dia.</small></span></a>
     <div class="header-actions">
       <span class="secure-header">${icon("shield-check", 15)} Ambiente seguro</span>
@@ -178,7 +179,7 @@ function refreshForm() {
   if (status) {
     status.innerHTML = state.cepBusy ? `<span class="flex-center">${icon("loader", 14, "spin")} Buscando endereço…</span>` : esc(state.cepStatus || "Seu endereço será preenchido a partir do CEP.");
   }
-  const submit = document.getElementById("submit");
+  const submit = document.getElementById("submit") || document.getElementById("submit-cancel");
   if (submit) submit.disabled = Object.keys(errors).length > 0 || state.cepBusy;
 }
 
@@ -231,7 +232,7 @@ function viewReview() {
     ["Endereço residencial", [["Endereço", `${d.street}, ${d.number}${d.complement ? `, ${d.complement}` : ""}`], ["Bairro", d.neighborhood], ["Cidade / Estado", `${d.city} / ${d.state}`], ["CEP", d.cep]]],
     ["Consentimento", [["Notícias e campanhas", d.marketing ? "Sim, desejo receber" : "Não desejo receber"], ["Termos e privacidade", "Aceitos"]]],
   ].map(([title, items]) => `<section class="review-section"><div class="review-heading"><h3>${title}</h3>
-      <a class="btn btn-link btn-sm" href="#/">${icon("pencil")} Editar</a></div>
+      <a class="btn btn-link btn-sm" href="#/declaracao">${icon("pencil")} Editar</a></div>
       <dl class="review-grid">${items.map(([l, v]) => `<div><dt>${l}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl></section>`).join("");
   return shell(2, `<div class="form-panel"><div class="panel-heading"><span class="heading-icon">${icon("clipboard-check", 20)}</span><div><h2>Revise seus dados</h2><p>Certifique-se de que tudo está correto.</p></div></div>
     ${sections}
@@ -269,13 +270,12 @@ async function api(path, options) {
 }
 
 async function generatePix() {
-  if (!state.order) state.order = { id: uuid(), pix: null, status: "new", busy: false, error: "" };
+  if (!state.order) state.order = { id: uuid(), kind: isCancelRoute() ? "cancel" : "declaration", pix: null, status: "new", busy: false, error: "" };
   const o = state.order;
   if (o.busy) return;
   o.busy = true; o.error = ""; paintPayment();
   try {
-    const isCancel = location.hash.startsWith("#/cancelamento");
-    const endpoint = isCancel ? "/api/pix/cancel" : "/api/pix/create";
+    const endpoint = o.kind === "cancel" ? "/api/pix/cancel" : "/api/pix/create";
     const pix = await api(endpoint, { method: "POST", body: JSON.stringify({ orderId: o.id, declaration: state.data }) });
     o.pix = pix; o.status = pix.status || "pending";
     startPolling();
@@ -285,8 +285,7 @@ async function generatePix() {
 
 /* Avisa a equipe no Discord (via servidor). Tenta algumas vezes; o cliente já pagou, então nunca bloqueia a confirmação. */
 async function notifyTeam(o) {
-  const isCancel = location.hash.startsWith("#/cancelamento");
-  const endpoint = isCancel ? "/api/pix/notify-cancel" : "/api/pix/notify";
+  const endpoint = o.kind === "cancel" ? "/api/pix/notify-cancel" : "/api/pix/notify";
   for (let i = 0; i < 3; i++) {
     try { await api(endpoint, { method: "POST", body: JSON.stringify({ orderId: o.id, declaration: state.data }) }); return; }
     catch { await new Promise((r) => setTimeout(r, 1000 * 2 ** i)); }
@@ -305,13 +304,12 @@ function startPolling() {
     if (left === 0) { o.status = "expired"; clearInterval(payTimer); return paintPayment(); }
     if (++tick % 4) return;
     try {
-      const s = await api(`/api/pix/status?orderId=${o.id}`);
+      const s = await api(`/api/pix/status?orderId=${o.id}${o.kind === "cancel" ? "&type=cancel" : ""}`);
       if (s.status !== "pending" && state.order === o) {
         o.status = s.status; clearInterval(payTimer);
         if (s.status === "paid") { 
           await notifyTeam(o); 
-          const isCancel = location.hash.startsWith("#/cancelamento");
-          location.hash = isCancel ? "#/cancelamento/confirmacao" : "#/confirmacao";
+          location.hash = o.kind === "cancel" ? "#/cancelamento/confirmacao" : "#/confirmacao";
         } else paintPayment();
       }
     } catch { /* falha de rede momentânea: tenta de novo no próximo ciclo */ }
@@ -323,7 +321,7 @@ function paintPayment() {
   if (!box) return;
   const o = state.order;
   const err = o && o.error ? `<p class="field-error pay-error" role="alert">${esc(o.error)}</p>` : "";
-  const back = `<a class="btn btn-link" href="#/checkout">${icon("arrow-left")} Voltar ao resumo</a>`;
+  const back = `<a class="btn btn-link" href="${o && o.kind === "cancel" ? "#/cancelamento/checkout" : isCancelRoute() ? "#/cancelamento/checkout" : "#/checkout"}">${icon("arrow-left")} Voltar ao resumo</a>`;
   if (!o || o.status === "new" || (!o.pix && o.status !== "expired")) {
     box.innerHTML = `${icon("qr-code", 44)}<h2>Pagar com PIX</h2>
       <p>Valor: <strong>${brl(SERVICE_PRICE_CENTS)}</strong></p>
@@ -387,7 +385,7 @@ function shellCancel(step, content) {
   }).join("");
   return `
   <header class="site-header"><div class="header-inner">
-    <a href="#/" class="brand"><img src="https://i.ibb.co/CsYPdqkf/imagemsite.png" alt="DeclareMei" class="brand-logo">
+    <a href="#/" class="brand"><img src="https://i.ibb.co/CsYPdqkf/imagemsite.png" alt="DeclareMei" class="brand-logo" onerror="this.onerror=null;this.src='imagemsite.png'">
       <span>Declare<span class="text-primary">Mei</span><small>Seu negócio em dia.</small></span></a>
     <div class="header-actions">
       <span class="secure-header">${icon("shield-check", 15)} Ambiente seguro</span>
@@ -404,8 +402,6 @@ function shellCancel(step, content) {
   </main>
   <footer class="site-footer"><span>© 2026 MEI Digital</span><span>Feito para quem empreende.</span><span>${icon("shield-check", 14)} Privacidade em primeiro lugar</span></footer>`;
 }
-
-const dataCancelamento = () => ({ name: "", cpf: "", birth: "", sex: "", email: "", phone: "", mobile: "", cnpj: "", cep: "", street: "", number: "", complement: "", neighborhood: "", city: "", state: "", marketing: false, terms: false });
 
 function viewIndexCancel() {
   const cepOk = digits(state.data.cep).length === 8;
@@ -473,7 +469,7 @@ function bindFormCancel() {
 }
 
 function viewReviewCancel() {
-  if (!isValid()) return shellCancel(2, emptyDraft());
+  if (!isValid()) return shellCancel(2, emptyDraft("#/cancelamento"));
   const d = state.data;
   const sections = [
     ["Dados pessoais", [["Nome completo", d.name], ["CPF", d.cpf], ["Data de nascimento", d.birth.split("-").reverse().join("/")], ["Sexo", d.sex], ["E-mail", d.email], ["Telefone", d.phone], ["Celular", d.mobile]]],
@@ -490,7 +486,7 @@ function viewReviewCancel() {
 }
 
 function viewCheckoutCancel() {
-  if (!isValid()) return shellCancel(3, emptyDraft());
+  if (!isValid()) return shellCancel(3, emptyDraft("#/cancelamento"));
   const d = state.data;
   return shellCancel(3, `<div class="form-panel"><div class="panel-heading"><span class="heading-icon">${icon("clipboard-check", 20)}</span><div><h2>Resumo do pedido</h2><p>Cancelamento de MEI</p></div></div>
     <div class="order-body"><h3>Assessoria para cancelamento de MEI</h3>
@@ -502,7 +498,7 @@ function viewCheckoutCancel() {
 }
 
 function viewPaymentCancel() {
-  if (!isValid()) return shellCancel(3, emptyDraft());
+  if (!isValid()) return shellCancel(3, emptyDraft("#/cancelamento"));
   if (!state.order || state.order.status === "new") {
     generatePix();
   }
@@ -538,6 +534,9 @@ function render() {
   const path = location.hash.replace(/^#/, "") || "/";
   const [view, title, after] = ROUTES[path] || ROUTES["/"];
   
+  // Pedido em andamento de outro fluxo (declaração x cancelamento) não pode ser reaproveitado
+  if (state.order && state.order.kind !== (isCancelRoute() ? "cancel" : "declaration")) state.order = null;
+
   // Redireciona para confirmação após pagamento
   if ((path === "/pagamento" || path === "/cancelamento/pagamento") && state.order && state.order.status === "paid") {
     const confirmPath = path === "/cancelamento/pagamento" ? "#/cancelamento/confirmacao" : "#/confirmacao";

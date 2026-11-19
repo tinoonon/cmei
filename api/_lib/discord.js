@@ -56,15 +56,15 @@ const notifyVisit = (req) => clientInfo(req).then((c) => sendEmbed({
   fields: [...clientFields(c), field("Veio de", c.referer, false)],
 }, { urlEnv: "DISCORD_ACCESS_WEBHOOK_URL" })).catch((e) => console.error("[discord]", e.message));
 
-const notifyPixCreated = (req, { orderId, amount, d }) => clientInfo(req).then((c) => sendEmbed({
-  title: "🧾 PIX gerado (aguardando pagamento)", color: 0xf39c12,
+const notifyPixCreated = (req, { orderId, amount, d, kind }) => clientInfo(req).then((c) => sendEmbed({
+  title: kind === "cancel" ? "🧾 PIX gerado — CANCELAMENTO de MEI (aguardando pagamento)" : "🧾 PIX gerado (aguardando pagamento)", color: 0xf39c12,
   fields: [field("Valor", brl(amount)), field("Pedido", orderId), ...person(d), ...clientFields(c)],
 })).catch((e) => console.error("[discord]", e.message));
 
-const notifyPaid = async (req, { orderId, t, d }) => {
+const notifyPaid = async (req, { orderId, t, d, kind }) => {
   const c = await clientInfo(req);
   await sendEmbed({
-    title: "✅ Pagamento confirmado — MEI 2026", color: 0x2ecc71, timestamp: t.paid_at || undefined,
+    title: kind === "cancel" ? "✅ Pagamento confirmado — CANCELAMENTO de MEI" : "✅ Pagamento confirmado — MEI 2026", color: 0x2ecc71, timestamp: t.paid_at || undefined,
     fields: [
       field("Valor", brl(t.amount)), field("Pedido", orderId),
       field("Quem pagou (banco)", `${t.payer_name || "—"} · ${t.payer_document || "—"}`, false),

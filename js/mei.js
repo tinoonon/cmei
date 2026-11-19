@@ -69,8 +69,12 @@ const RULES = {
 
 function validate(data) {
   const errors = {};
+  const src = data && typeof data === "object" ? data : {};
   for (const key in RULES) {
-    for (const [test, msg] of RULES[key]) if (!test(data[key])) errors[key] = msg;
+    // campos ausentes/de tipo errado (requisição malformada) viram valor vazio em vez de quebrar a validação
+    const raw = src[key];
+    const value = key === "terms" ? raw : typeof raw === "string" ? raw : "";
+    for (const [test, msg] of RULES[key]) if (!test(value)) errors[key] = msg;
   }
   return errors;
 }

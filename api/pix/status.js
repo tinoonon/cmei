@@ -8,7 +8,8 @@ module.exports = async (req, res) => {
   if (!UUID.test(orderId)) return res.status(400).json({ error: "Pedido inválido." });
   try {
     // Se ainda "pending", a própria API consulta o gateway (conforme a documentação).
-    const t = await getPix(`mei-${orderId.toLowerCase()}`);
+    const prefix = req.query && req.query.type === "cancel" ? "cancel" : "mei";
+    const t = await getPix(`${prefix}-${orderId.toLowerCase()}`);
     return res.status(200).json({ status: t.status, paid_at: t.paid_at || null, expires_at: t.expires_at });
   } catch (err) {
     const [status, message] = toClientError(err);
